@@ -1,8 +1,10 @@
 package rabbitmq
 
 import (
+	"encoding/json"
 	"log"
 
+	triggerMailling "github.com/GoPicos-Mailing-Service/internal/modules/TriggerMailings/controllers"
 	"github.com/streadway/amqp"
 )
 
@@ -17,21 +19,21 @@ func MakeRabbitMQEventProvider(connectionURL string, exchangeName string) *Rabbi
 
 	if err != nil {
 		panic("Could not connect to RabbitMQ")
-		return nil
+
 	}
 
 	channel, err := conn.Channel()
 
 	if err != nil {
 		panic("Could not create channel")
-		return nil
+
 	}
 
 	err = channel.ExchangeDeclare(exchangeName, "direct", true, false, false, false, nil)
 
 	if err != nil {
 		panic("Could not declare exchange")
-		return nil
+
 	}
 
 	return &RabbitMQEventProvider{
@@ -51,14 +53,14 @@ func (r *RabbitMQEventProvider) ConsumeEvents() {
 
 	}
 
-	err := r.channel.QueueBind(queue.Name, "email", "opencred-dev", false, nil)
+	err := r.channel.QueueBind(queue.Name, "mailing", "gopicos-dev", false, nil)
 
 	if err != nil {
 		panic("Could not bind queue")
 
 	}
 
-	msgs, err := r.channel.Consume(queue.Name, "", true, false, false, false, nil)
+	msgs, err := r.channel.Consume("mailing", "", true, false, false, false, nil)
 
 	if err != nil {
 		panic("Could not consume messages")
@@ -76,6 +78,19 @@ func (r *RabbitMQEventProvider) ConsumeEvents() {
 			payloadString := string(message.Body)
 
 			log.Println(payloadString)
+
+			var payload triggerMailling.TriggerMaillingDTO
+
+			err := json.Unmarshal([]byte(payloadString), &payload)
+
+			if err != nil {
+				panic("Could not unmarshal payload")
+			}
+
+			triggerMailling.TriggerMailling(triggerMailling.TriggerMaillingDTO{
+				Email: payload.Email,
+				Token: payload.Token,
+			})
 		}
 	}()
 	<-forever
